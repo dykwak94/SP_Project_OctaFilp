@@ -1,61 +1,201 @@
-// client.c
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>             // close()
-#include <arpa/inet.h>          // inet_addr(), htons()
-#include <sys/socket.h>         // socket(), connect(), send(), recv()
-#include "cJSON.h"
+#include <unistd.h>             // For close()
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <cjson/cJSON.h>
 #include "board.h"
 
 #define SIZE 8
 
 char username[32];
-int sock;
-
-int dr[8] = { -1, -1, -1, 0, 1, 1, 1, 0 };
-int dc[8] = { -1, 0, 1, 1, 1, 0, -1, -1 };
+int sock;   // Linux: socket is an int
 
 void send_json(cJSON* json) {
     char* text = cJSON_PrintUnformatted(json);
     send(sock, text, strlen(text), 0);
-    send(sock, "\n", 1, 0);
+    send(sock, "\n", 1, 0); // Message delimiter for TCP
     free(text);
 }
 
-void move_generate(char board[SIZE][SIZE], int* sx, int* sy, int* tx, int* ty, char token) {
-    for (int r = 0; r < SIZE; r++) {
-        for (int c = 0; c < SIZE; c++) {
-            if (board[r][c] != token) continue;
+#define N 8
 
+typedef struct {
+    int sx, sy, tx, ty;
+    int gain;
+    int adj_my_cells;
+    int is_clone;
+} Move;
+
+int dx[8] = { -1, -1, -1, 0, 0, 1, 1, 1 };
+int dy[8] = { -1, 0, 1, -1, 1, -1, 0, 1 };
+
+// Check if (x,y) is inside the 8x8 board
+int in_bounds(int x, int y) {
+    return x >= 0 && x < N && y >= 0 && y < N;
+}
+
+// Count number of opponent pieces flipped if I move to (tx,ty)
+int count_flips(char board[8][9], char myColor, int tx, int ty) {
+    char opp = (myColor == 'R') ? 'B' : 'R';
+    int flips = 0;
+    for (int d = 0; d < 8; d++) {
+        int nx = tx + dx[d], ny = ty + dy[d];
+        if (in_bounds(nx, ny) && board[nx][ny] == opp)
+            flips++;
+    }
+    return flips;
+}
+
+// Count adjacent my-color cells around (x, y) after move
+int count_adj_my_cells(char board[8][9], char myColor, int x, int y) {
+    int count = 0;
+    for (int d = 0; d < 8; d++) {
+        int nx = x + dx[d], ny = y + dy[d];
+        if (in_bounds(nx, ny) && board[nx][ny] == myColor)
+            count++;
+    }
+    return count;
+}
+
+// Make a copy of the board and apply a move (clone/jump)
+void apply_move(char src[8][9], char dest[8][9], char myColor, int sx, int sy, int tx, int ty, int is_clone) {
+    memcpy(dest, src, sizeof(char) * 8 * 9);
+    if (is_clone) {
+        dest[tx][ty] = myColor;
+    }
+    else {
+        dest[sx][sy] = '.';
+        dest[tx][ty] = myColor;
+    }
+    // Flip opponent pieces around destination
+    char opp = (myColor == 'R') ? 'B' : 'R';
+    for (int d = 0; d < 8; d++) {
+        int nx = tx + dx[d], ny = ty + dy[d];
+        if (in_bounds(nx, ny) && dest[nx][ny] == opp)
+            dest[nx][ny] = myColor;
+    }
+}
+
+// Check if can move from (sx,sy) to (tx,ty)
+int valid_move(char board[8][9], int sx, int sy, int tx, int ty) {
+    if (!in_bounds(tx, ty)) return 0;
+    if (board[tx][ty] != '.') return 0;
+    return 1;
+}
+
+// Main function for move generation
+int* move_generate(char board[8][9], char myColor) {
+    static int result[4] = { 0, 0, 0, 0 };
+    Move moves[256];
+    int move_count = 0;
+
+    // 1. Gather all possible moves
+    for (int sx = 0; sx < N; sx++) {
+        for (int sy = 0; sy < N; sy++) {
+            if (board[sx][sy] != myColor) continue;
+            // Clone (adjacent)
             for (int d = 0; d < 8; d++) {
-                int nr = r + dr[d], nc = c + dc[d];
-                int jr = r + 2 * dr[d], jc = c + 2 * dc[d];
-
-                if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && board[nr][nc] == '.') {
-                    *sx = r; *sy = c;
-                    *tx = nr; *ty = nc;
-                    return;
-                }
-                if (jr >= 0 && jr < SIZE && jc >= 0 && jc < SIZE && board[jr][jc] == '.') {
-                    *sx = r; *sy = c;
-                    *tx = jr; *ty = jc;
-                    return;
-                }
+                int tx = sx + dx[d], ty = sy + dy[d];
+                if (!valid_move(board, sx, sy, tx, ty)) continue;
+                char temp[8][9];
+                apply_move(board, temp, myColor, sx, sy, tx, ty, 1);
+                int flips = count_flips(board, myColor, tx, ty);
+                int gain = flips + 1; // +1 for new clone piece
+                int adj = count_adj_my_cells(temp, myColor, tx, ty);
+                moves[move_count++] = (Move){ sx, sy, tx, ty, gain, adj, 1 };
+            }
+            // Jump (2 cells away)
+            for (int d = 0; d < 8; d++) {
+                int tx = sx + 2 * dx[d], ty = sy + 2 * dy[d];
+                if (!valid_move(board, sx, sy, tx, ty)) continue;
+                char temp[8][9];
+                apply_move(board, temp, myColor, sx, sy, tx, ty, 0);
+                int flips = count_flips(board, myColor, tx, ty);
+                int gain = flips; // No +1 for jump (the source disappears)
+                int adj = count_adj_my_cells(temp, myColor, tx, ty);
+                moves[move_count++] = (Move){ sx, sy, tx, ty, gain, adj, 0 };
             }
         }
     }
-    *sx = *sy = *tx = *ty = 0;
+
+    // 2. No moves = pass
+    if (move_count == 0) {
+        result[0] = result[1] = result[2] = result[3] = 0;
+        return result;
+    }
+
+    // 3. Find max gain
+    int max_gain = -1;
+    for (int i = 0; i < move_count; i++)
+        if (moves[i].gain > max_gain)
+            max_gain = moves[i].gain;
+
+    // 4. Collect max gain moves
+    Move best_moves[256];
+    int best_count = 0;
+    for (int i = 0; i < move_count; i++)
+        if (moves[i].gain == max_gain)
+            best_moves[best_count++] = moves[i];
+
+    // 5. Prefer clones among best moves
+    int clone_best = 0;
+    for (int i = 0; i < best_count; i++)
+        if (best_moves[i].is_clone)
+            clone_best = 1;
+    // If any clone is best, filter only clones
+    if (clone_best) {
+        int new_count = 0;
+        for (int i = 0; i < best_count; i++)
+            if (best_moves[i].is_clone)
+                best_moves[new_count++] = best_moves[i];
+        best_count = new_count;
+    }
+
+    // 6. Among best, pick one with most adjacent my-cells after move
+    int max_adj = -1;
+    for (int i = 0; i < best_count; i++)
+        if (best_moves[i].adj_my_cells > max_adj)
+            max_adj = best_moves[i].adj_my_cells;
+
+    Move final_moves[256];
+    int final_count = 0;
+    for (int i = 0; i < best_count; i++)
+        if (best_moves[i].adj_my_cells == max_adj)
+            final_moves[final_count++] = best_moves[i];
+
+    // 7. Final tiebreak: lowest coordinates
+    Move* chosen = &final_moves[0];
+    for (int i = 1; i < final_count; i++) {
+        Move* m = &final_moves[i];
+        if (m->sx < chosen->sx ||
+            (m->sx == chosen->sx && m->sy < chosen->sy) ||
+            (m->sx == chosen->sx && m->sy == chosen->sy && m->tx < chosen->tx) ||
+            (m->sx == chosen->sx && m->sy == chosen->sy && m->tx == chosen->tx && m->ty < chosen->ty)) {
+            chosen = m;
+        }
+    }
+
+    // 8. Output in 1-based coordinates
+    result[0] = chosen->sx + 1;
+    result[1] = chosen->sy + 1;
+    result[2] = chosen->tx + 1;
+    result[3] = chosen->ty + 1;
+    return result;
 }
 
-void print_board(cJSON* board_array) {
+void print_board(cJSON *board_array) {
     char board[8][9];
-    for (int i = 0; i < SIZE; i++) {
-        const char* row = cJSON_GetArrayItem(board_array, i)->valuestring;
+    for (int i = 0; i < 8; i++) {
+        const char *row = cJSON_GetArrayItem(board_array, i)->valuestring;
         strncpy(board[i], row, 9);
+        board[i][8] = '\0'; // null-terminate for safety
         printf("%s\n", board[i]);
     }
-    update_led_board(board);
+    update_led_board(board);  // LED 매트릭스에 출력
 }
 
 void handle_turn(cJSON* json) {
@@ -64,15 +204,16 @@ void handle_turn(cJSON* json) {
     printf("\n=== Current Board ===\n");
     print_board(board_arr);
 
-    char board[SIZE][SIZE];
+    char board[SIZE][9];  // 안전하게 9로 유지
     for (int i = 0; i < SIZE; i++) {
         const char* row = cJSON_GetArrayItem(board_arr, i)->valuestring;
-        for (int j = 0; j < SIZE; j++) board[i][j] = row[j];
+        strncpy(board[i], row, 8);
+        board[i][8] = '\0';  // null-terminate
     }
 
     char token = (strcmp(username, "Alice") == 0) ? 'R' : 'B';
-    int sx, sy, tx, ty;
-    move_generate(board, &sx, &sy, &tx, &ty, token);
+    int* mv = move_generate(board, token);
+    int sx = mv[0], sy = mv[1], tx = mv[2], ty = mv[3];
 
     cJSON* move = cJSON_CreateObject();
     cJSON_AddStringToObject(move, "type", "move");
@@ -105,7 +246,7 @@ int main(int argc, char* argv[]) {
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
     if (sock < 0) {
-        perror("socket() failed");
+        perror("[ERROR] socket() failed");
         return 1;
     }
 
@@ -116,7 +257,7 @@ int main(int argc, char* argv[]) {
 
     printf("[DEBUG] Attempting to connect to server...\n"); fflush(stdout);
     if (connect(sock, (struct sockaddr*)&server, sizeof(server)) != 0) {
-        perror("connect() failed");
+        perror("[ERROR] Connection failed.");
         return 1;
     }
 
@@ -218,6 +359,6 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    close(sock);
+    close(sock); // Linux socket close
     return 0;
 }
