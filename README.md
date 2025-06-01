@@ -1,6 +1,3 @@
 # SP_Project_OctaFilp
 
-g++ -o client client.c board.c \
-    -I~/rpi-rgb-led-matrix/include \
-    -L~/rpi-rgb-led-matrix/lib -lrgbmatrix \
-    -lcjson -lpthread
+g++ -o board board.c -I/home/dykwak/rpi-rgb-led-matrix/include -L/home/dykwak/rpi-rgb-led-matrix/lib -lrgbmatrix
