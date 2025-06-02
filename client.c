@@ -11,6 +11,7 @@
 
 #define SIZE 8
 
+
 char username[32];
 int sock;   // Linux: socket is an int
 
@@ -196,6 +197,7 @@ void print_board(cJSON *board_array) {
         printf("%s\n", board[i]);
     }
     update_led_board(board);  // LED 매트릭스에 출력
+    sleep(1);
 }
 
 void handle_turn(cJSON* json) {

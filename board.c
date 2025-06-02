@@ -19,7 +19,7 @@ int boardvalid(char* line) {
     return 1;
 }
 
-Color get_color(char c) {
+struct Color get_color(char c) {
     switch(c) {
         case 'R': return (Color){255, 0, 0};    // Red
         case 'B': return (Color){0, 0, 255};    // Blue
@@ -57,7 +57,7 @@ void update_led_board(char board[8][9]) {
 
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
-            Color c = get_color(board[row][col]);
+            struct Color c = get_color(board[row][col]);
             if (board[row][col] == '.') continue;
             int start_x = col * CELL_SIZE + 1;
             int start_y = row * CELL_SIZE + 1;
