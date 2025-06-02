@@ -6,10 +6,11 @@
 
 #define MATRIX_SIZE 64
 #define BOARD_SIZE 8
-#define CELL_SIZE (MATRIX_SIZE / BOARD_SIZE)
+#define CELL_SIZE (MATRIX_SIZE / BOARD_SIZE) 
 
 char board[BOARD_SIZE][BOARD_SIZE+1];
 
+// check validity of board
 int boardvalid(char* line) {
     if (strlen(line) != 8) return 0;
     for (int i = 0; i < 8; i++) {
@@ -19,6 +20,7 @@ int boardvalid(char* line) {
     return 1;
 }
 
+// mapping contents of board and color
 struct Color get_color(char c) {
     switch(c) {
         case 'R': return (Color){255, 0, 0};    // Red
@@ -28,12 +30,13 @@ struct Color get_color(char c) {
     }
 }
 
-// 전역으로 매트릭스 핸들 유지 (처음 한 번만 생성)
+// maintain matrix handle as global (declare just once at the beginning)
 static struct RGBLedMatrix *matrix = NULL;
 static struct LedCanvas *canvas = NULL;
 
+// Main function to visualize board in led panel
 void update_led_board(char board[8][9]) {
-    // 최초 1회만 매트릭스 초기화
+    // Initialize matrix just once at the beginning
     if (!matrix) {
         struct RGBLedMatrixOptions options;
         struct RGBLedRuntimeOptions rt_options;
@@ -55,6 +58,7 @@ void update_led_board(char board[8][9]) {
 
     led_canvas_clear(canvas);
 
+    // Match color to each coordinates
     for (int row = 0; row < BOARD_SIZE; row++) {
         for (int col = 0; col < BOARD_SIZE; col++) {
             struct Color c = get_color(board[row][col]);
@@ -68,9 +72,9 @@ void update_led_board(char board[8][9]) {
             }
         }
     }
-    // 화면 갱신 필요시 추가 코드 (라이브러리 따라 다름)
 }
-#ifdef BOARD_MAIN
+
+#ifdef BOARD_MAIN // Prevent main calling in client execution
 int main() {
     for (int i = 0; i < BOARD_SIZE; ++i) {
         char line[16];
@@ -83,12 +87,13 @@ int main() {
             printf("Board input error\n");
             return 0;
         }
+        // valid board input
         for (int j = 0; j < BOARD_SIZE; ++j){
             board[i][j] = line[j];
         }
     }
-    update_led_board(board);
-    sleep(10);
+    update_led_board(board); // display the board on the led panel
+    sleep(10); // maintain the displayed status for 10s
     return 0;
 }
 #endif
