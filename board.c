@@ -70,7 +70,7 @@ void update_led_board(char board[8][9]) {
     }
     // 화면 갱신 필요시 추가 코드 (라이브러리 따라 다름)
 }
-
+#ifdef BOARD_MAIN
 int main() {
     for (int i = 0; i < BOARD_SIZE; ++i) {
         char line[16];
@@ -91,3 +91,4 @@ int main() {
     sleep(10);
     return 0;
 }
+#endif
