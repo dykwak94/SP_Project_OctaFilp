@@ -8,3 +8,5 @@ ex)
 ./client -ip {ip} -port {port} -username {username} 
 sudo ./board 
 ```
+dykwak@raspberrypi:~/assignment3_1 $ g++ -DBOARD_MAIN -o board board.c -I/home/dykwak/rpi-rgb-led-matrix/include -L/home/dykwak/rpi-rgb-led-matrix/lib -lrgbmatrix
+dykwak@raspberrypi:~/assignment3_1 $ sudo ./board
