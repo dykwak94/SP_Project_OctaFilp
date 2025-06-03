@@ -1,15 +1,4 @@
-# SP_Project_OctaFilp
-```bash
-sudo apt install lib-cjson-dev 
-gcc -o client client.c -lcjson 
-g++ -o board board.c -I/your/path/rpi-rgb-led-matrix/include -L/your/path/rpi-rgb-led-matrix/lib -lrgbmatrix 
-ex) 
-  g++ -o board board.c -I/home/dykwak/rpi-rgb-led-matrix/include -L/home/dykwak/rpi-rgb-led-matrix/lib -lrgbmatrix
-./client -ip {ip} -port {port} -username {username} 
-sudo ./board 
-```
-
-# Updated 25.06.02
+# SP_Project_OctaFilp Execution Guide _(Updated 25.06.04)_
 ## Handle one-wire issue
 Disable 1-Wire in raspi-config:
 1. Open a terminal on your Pi.
@@ -22,11 +11,7 @@ sudo raspi-config
 ## Board Alone
 ### (Build board)
 ```bash
-$ g++ -DBOARD_MAIN -o board board.c -I/your/path/rpi-rgb-led-matrix/include -L/your/path/rpi-rgb-led-matrix/lib -lrgbmatrix
-```
-```bash
-# Example
-$ g++ -DBOARD_MAIN -o board board.c -I/home/dykwak/rpi-rgb-led-matrix/include -L/home/dykwak/rpi-rgb-led-matrix/lib -lrgbmatrix
+g++ -DBOARD_MAIN -o board board.c -I./rpi-rgb-led-matrix/include -L./rpi-rgb-led-matrix/lib -lrgbmatrix
 ```
 ### (Run board)
 ```bash
@@ -36,11 +21,7 @@ $ sudo ./board
 ## Client including board
 ### (Build Client)
 ```bash
-g++ -o client client.c board.c -I/your/path/rpi-rgb-led-matrix/include -L/your/path/rpi-rgb-led-matrix/lib -lrgbmatrix -lcjson
-```
-```bash
-# Example
-g++ -o client client.c board.c -I/home/dykwak/rpi-rgb-led-matrix/include -L/home/dykwak/rpi-rgb-led-matrix/lib -lrgbmatrix -lcjson
+g++ -o client client.c board.c -I./rpi-rgb-led-matrix/include -L./rpi-rgb-led-matrix/lib -lrgbmatrix -lcjson
 ```
 ### (Run Client)
 ```bash
